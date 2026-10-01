@@ -18,7 +18,31 @@ button,select,input[type=color]{border:none;border-radius:20px;padding:8px 14px;
 canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ffffff,#eef1ff);}
 #snapshots{margin:10px;font-size:13px;}
 .phaseCtrl{display:flex;align-items:center;gap:6px;margin:4px 0;}
-.deleteBtn{cursor:pointer;color:#c33;font-weight:bold;}
+.deleteBtn{
+  width:32px;height:32px;padding:0;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:#fff;color:#a33;border:1px solid #ead7dc;
+  box-shadow:none;cursor:pointer;
+}
+.deleteBtn:hover{background:#fff1f3;}
+.deleteBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.lineWidthControl{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;background:#fff;border:1px solid #dfe4ff;border-radius:18px;}
+.lineWidthControl label{font-size:12px;font-weight:700;white-space:nowrap;}
+.lineWidthControl input[type=range]{width:110px;accent-color:#7b8cff;}
+#lineWidthValue{min-width:2.2em;font-size:12px;font-weight:700;text-align:right;}
+#snapshots{
+  margin:12px;background:rgba(255,255,255,.72);border-radius:16px;
+  padding:10px 12px;font-size:13px;box-shadow:0 4px 14px rgba(51,51,68,.05);
+}
+.snapshotHeader{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px;}
+.currentLegend{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:12px;background:#fff;border:1px solid #e2e6f5;}
+.currentLegendLine{width:28px;height:0;border-top:3px solid var(--current-color,#ff7eb6);box-shadow:0 0 0 1px rgba(255,255,255,.9);}
+.phaseCtrl{display:flex;align-items:center;gap:8px;margin:6px 0;padding:5px 7px;border-radius:12px;background:rgba(255,255,255,.78);}
+.snapshotLineSample{width:30px;height:0;border-top-width:3px;border-top-style:dashed;flex:0 0 auto;}
+.snapshotName{min-width:54px;font-weight:700;}
+.snapshotColor{width:30px;height:30px;padding:2px;border-radius:8px;background:#fff;border:1px solid #dfe4ff;}
+.phaseLabel{font-size:12px;white-space:nowrap;}
+.phaseCtrl input[type=range]{flex:1;min-width:90px;accent-color:#7b8cff;}
 
 body{min-height:100vh;padding-bottom:46px;}
 header{
@@ -122,9 +146,14 @@ header{
   <div class="headerControls">
     <button id="startBtn">スタート</button>
     <button id="stopBtn">ストップ</button>
-    <button id="snapBtn">📷</button>
+    <button id="snapBtn">記録</button>
     <input type="color" id="colorPicker" value="#ff7eb6">
     <button id="clearColor">透明</button>
+    <div class="lineWidthControl" title="波形の線の太さ">
+      <label for="lineWidthSlider">線の太さ</label>
+      <input type="range" id="lineWidthSlider" min="1" max="6" step="0.5" value="2">
+      <span id="lineWidthValue">2.0</span>
+    </div>
   </div>
 
   <div class="viewControls">
@@ -161,18 +190,18 @@ header{
     <ul>
       <li>マイクから入力した音をリアルタイムで可視化できます。</li>
       <li>時間波形・極座標・リサージュ・スペクトルの4種類の表示を切り替えられます。</li>
-      <li>波形をスナップショットとして保存し、現在の音と重ねて比較できます。</li>
-      <li>保存した波形ごとに色を変え、時間波形では位相をずらして比較できます。</li>
+      <li>波形を「記録」として保存し、現在の音と重ねて比較できます。記録線には自動で異なる色と破線パターンを割り当てます。</li>
+      <li>現在の波形は太めの実線、記録した波形は色分けした破線で表示します。各記録は個別に色変更・削除でき、時間波形では位相もずらせます。</li>
     </ul>
 
     <h3>基本的な使い方</h3>
     <ol>
       <li><b>スタート</b>を押し、ブラウザから求められたマイク使用を許可します。</li>
       <li><b>表示</b>から観察したいグラフを選びます。</li>
-      <li>色を選ぶと、現在の波形と保存するスナップショットの色を変更できます。</li>
-      <li>📷を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
+      <li>色を選ぶと現在の波形の色を変更できます。記録線の色は記録後に個別に変更できます。</li>
+      <li><b>記録</b>を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
       <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
-      <li>保存した波形は ❌ で削除できます。<b>ストップ</b>でマイク入力を終了します。</li>
+      <li>保存した波形は各行のゴミ箱ボタンで個別に削除できます。ヘッダの<b>線の太さ</b>で描画線幅を調整できます。<b>ストップ</b>でマイク入力を終了します。</li>
     </ol>
 
     <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
@@ -193,9 +222,23 @@ const ctx=cv.getContext("2d");
 let audioCtx, analyser, dataTime, dataFreq, stream;
 let snapshots=[];
 let currentColor="#ff7eb6";
+let lineWidth=2;
+let recordCounter=0;
+const recordColors=["#0066cc","#e85d04","#6a4c93","#00875a","#d00070","#6b5b00","#00a6a6","#c2410c"];
+const recordDashes=[[10,5],[3,4],[14,4,3,4],[7,3,2,3],[16,5],[4,3,10,3]];
 
-colorPicker.oninput=e=>currentColor=e.target.value;
-clearColor.onclick=()=>currentColor="transparent";
+clearColor.onclick=()=>{currentColor="transparent";syncCurrentLegend();};
+colorPicker.oninput=e=>{currentColor=e.target.value;syncCurrentLegend();};
+const lineWidthSlider=document.getElementById("lineWidthSlider");
+const lineWidthValue=document.getElementById("lineWidthValue");
+lineWidthSlider.oninput=e=>{
+  lineWidth=parseFloat(e.target.value);
+  lineWidthValue.textContent=lineWidth.toFixed(1);
+};
+function syncCurrentLegend(){
+  document.documentElement.style.setProperty("--current-color",currentColor==="transparent"?"#999":currentColor);
+}
+syncCurrentLegend();
 
 const qrModal=document.getElementById("qrModal");
 const helpModal=document.getElementById("helpModal");
@@ -235,36 +278,91 @@ function stop(){stream.getTracks().forEach(t=>t.stop());audioCtx.close();}
 startBtn.onclick=start; stopBtn.onclick=stop;
 
 snapBtn.onclick=()=>{
+  if(!analyser)return;
   analyser.getByteTimeDomainData(dataTime);
   analyser.getByteFrequencyData(dataFreq);
-  snapshots.push({time:new Uint8Array(dataTime),freq:new Uint8Array(dataFreq),color:currentColor,shift:0});
+  const n=recordCounter++;
+  snapshots.push({
+    time:new Uint8Array(dataTime),
+    freq:new Uint8Array(dataFreq),
+    color:recordColors[n%recordColors.length],
+    dash:recordDashes[n%recordDashes.length],
+    shift:0,
+    id:n+1
+  });
   updateSnapshotUI();
 };
 
 modeSel.onchange=updateSnapshotUI;
+updateSnapshotUI();
 
 function updateSnapshotUI(){
   const box=document.getElementById("snapshots");
-  box.innerHTML="<b>保存したスナップショット：</b>";
   const mode=modeSel.value;
+  box.innerHTML="";
+
+  const head=document.createElement("div");
+  head.className="snapshotHeader";
+  head.innerHTML=`<b>記録した波形：</b><span class="currentLegend"><span class="currentLegendLine"></span>現在（実線）</span>`;
+  box.appendChild(head);
+
+  if(!snapshots.length){
+    const empty=document.createElement("span");
+    empty.textContent="まだ記録はありません。";
+    empty.style.opacity=".68";
+    box.appendChild(empty);
+    return;
+  }
 
   snapshots.forEach((s,i)=>{
     const div=document.createElement("div");
     div.className="phaseCtrl";
-    div.innerHTML=`<span style="color:${s.color}">■</span> #${i+1}`;
+
+    const sample=document.createElement("span");
+    sample.className="snapshotLineSample";
+    sample.style.borderTopColor=s.color;
+    sample.style.borderTopStyle="dashed";
+    div.appendChild(sample);
+
+    const name=document.createElement("span");
+    name.className="snapshotName";
+    name.textContent=`記録 ${i+1}`;
+    div.appendChild(name);
+
+    const color=document.createElement("input");
+    color.type="color";
+    color.className="snapshotColor";
+    color.value=s.color;
+    color.title="この記録線の色";
+    color.oninput=e=>{
+      s.color=e.target.value;
+      sample.style.borderTopColor=s.color;
+    };
+    div.appendChild(color);
 
     if(mode==="wave"){
+      const label=document.createElement("span");
+      label.className="phaseLabel";
+      label.textContent="位相";
+      div.appendChild(label);
+
       const slider=document.createElement("input");
-      slider.type="range"; slider.min=-1024; slider.max=1024; slider.value=s.shift;
+      slider.type="range";
+      slider.min=-1024; slider.max=1024; slider.value=s.shift;
       slider.oninput=e=>s.shift=parseInt(e.target.value);
-      div.appendChild(document.createTextNode(" 位相"));
       div.appendChild(slider);
+    }else{
+      const spacer=document.createElement("span");
+      spacer.style.flex="1";
+      div.appendChild(spacer);
     }
 
-    const del=document.createElement("span");
-    del.textContent=" ❌";
+    const del=document.createElement("button");
     del.className="deleteBtn";
-    del.onclick=()=>{snapshots.splice(i,1);updateSnapshotUI();}
+    del.title="この記録を削除";
+    del.setAttribute("aria-label",`記録 ${i+1} を削除`);
+    del.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M7 7l1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>`;
+    del.onclick=()=>{snapshots.splice(i,1);updateSnapshotUI();};
     div.appendChild(del);
     box.appendChild(div);
   });
@@ -351,20 +449,39 @@ function draw(){
   }
 
   // ===== グラフ描画 =====
-  function wave(arr,color,shift=0){
-    if(color==="transparent")return;
-    ctx.strokeStyle=color; ctx.beginPath();
+  function beginTrace(color,opts={}){
+    if(color==="transparent")return false;
+    ctx.save();
+    ctx.strokeStyle=color;
+    ctx.lineWidth=opts.width||lineWidth;
+    ctx.globalAlpha=opts.alpha??1;
+    ctx.setLineDash(opts.dash||[]);
+    ctx.lineCap="round";
+    ctx.lineJoin="round";
+    if(opts.current){
+      ctx.shadowColor="rgba(255,255,255,.98)";
+      ctx.shadowBlur=6;
+    }
+    ctx.beginPath();
+    return true;
+  }
+  function endTrace(){
+    ctx.stroke();
+    ctx.restore();
+  }
+  function wave(arr,color,shift=0,opts={}){
+    if(!beginTrace(color,opts))return;
     for(let i=0;i<arr.length;i++){
       let idx=(i+shift+arr.length)%arr.length;
       let x=i*w/arr.length;
       let y=h/2+(arr[idx]-128)/128*h*0.4;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
-    } ctx.stroke();
+    }
+    endTrace();
   }
-  function polar(arr,color){
-    if(color==="transparent")return;
+  function polar(arr,color,opts={}){
+    if(!beginTrace(color,opts))return;
     const cx=w/2,cy=h/2,R=Math.min(w,h)*0.35;
-    ctx.strokeStyle=color; ctx.beginPath();
     for(let i=0;i<arr.length;i++){
       let ang=i/arr.length*Math.PI*2;
       let amp=(arr[i]-128)/128;
@@ -372,41 +489,42 @@ function draw(){
       let x=cx+Math.cos(ang)*r,y=cy+Math.sin(ang)*r;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
-    ctx.closePath(); ctx.stroke();
+    ctx.closePath();
+    endTrace();
   }
-  function liss(arr,color){
-    if(color==="transparent")return;
-    ctx.strokeStyle=color; ctx.beginPath();
+  function liss(arr,color,opts={}){
+    if(!beginTrace(color,opts))return;
     for(let i=0;i<arr.length;i++){
       let x=(arr[i]-128)/128;
       let y=(arr[(i+100)%arr.length]-128)/128;
       x=w/2+x*w*0.4; y=h/2+y*h*0.4;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
-    ctx.stroke();
+    endTrace();
   }
-  function spectrum(arr,color){
-    if(color==="transparent")return;
-    ctx.strokeStyle=color; ctx.beginPath();
+  function spectrum(arr,color,opts={}){
+    if(!beginTrace(color,opts))return;
     for(let i=0;i<arr.length;i++){
       let x=i*w/arr.length;
       let y=h-arr[i]/255*h*0.9;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
-    ctx.stroke();
+    endTrace();
   }
 
   snapshots.forEach(s=>{
-    if(mode==="wave") wave(s.time,s.color,s.shift);
-    if(mode==="polar") polar(s.time,s.color);
-    if(mode==="lissajous") liss(s.time,s.color);
-    if(mode==="spectrum") spectrum(s.freq,s.color);
+    const opts={width:lineWidth,dash:s.dash||[9,5],alpha:.88};
+    if(mode==="wave") wave(s.time,s.color,s.shift,opts);
+    if(mode==="polar") polar(s.time,s.color,opts);
+    if(mode==="lissajous") liss(s.time,s.color,opts);
+    if(mode==="spectrum") spectrum(s.freq,s.color,opts);
   });
 
-  if(mode==="wave") wave(dataTime,currentColor);
-  if(mode==="polar") polar(dataTime,currentColor);
-  if(mode==="lissajous") liss(dataTime,currentColor);
-  if(mode==="spectrum") spectrum(dataFreq,currentColor);
+  const currentOpts={width:lineWidth+1.25,dash:[],alpha:1,current:true};
+  if(mode==="wave") wave(dataTime,currentColor,0,currentOpts);
+  if(mode==="polar") polar(dataTime,currentColor,currentOpts);
+  if(mode==="lissajous") liss(dataTime,currentColor,currentOpts);
+  if(mode==="spectrum") spectrum(dataFreq,currentColor,currentOpts);
 
   ctx.restore();
 

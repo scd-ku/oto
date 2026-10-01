@@ -66,6 +66,10 @@ header{
   letter-spacing:.02em;
 }
 .headerControls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+#startBtn.isRunning{
+  background:linear-gradient(135deg,#f05d72,#ff8a65);
+  box-shadow:0 3px 10px rgba(190,62,79,.18);
+}
 .viewControls{display:flex;gap:8px;align-items:center;justify-self:end;}
 .iconBtn{
   width:36px;height:36px;padding:0;border-radius:50%;
@@ -144,8 +148,7 @@ header{
   </div>
 
   <div class="headerControls">
-    <button id="startBtn">スタート</button>
-    <button id="stopBtn">ストップ</button>
+    <button id="startBtn" aria-pressed="false">スタート</button>
     <button id="snapBtn">記録</button>
     <input type="color" id="colorPicker" value="#ff7eb6">
     <button id="clearColor">透明</button>
@@ -196,12 +199,12 @@ header{
 
     <h3>基本的な使い方</h3>
     <ol>
-      <li><b>スタート</b>を押し、ブラウザから求められたマイク使用を許可します。</li>
+      <li><b>スタート</b>を押し、ブラウザから求められたマイク使用を許可します。入力中は同じボタンが<b>ストップ</b>に切り替わります。</li>
       <li><b>表示</b>から観察したいグラフを選びます。</li>
       <li>色を選ぶと現在の波形の色を変更できます。記録線の色は記録後に個別に変更できます。</li>
       <li><b>記録</b>を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
       <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
-      <li>保存した波形は各行のゴミ箱ボタンで個別に削除できます。ヘッダの<b>線の太さ</b>で描画線幅を調整できます。<b>ストップ</b>でマイク入力を終了します。</li>
+      <li>保存した波形は各行のゴミ箱ボタンで個別に削除できます。ヘッダの<b>線の太さ</b>で描画線幅を調整できます。入力中の<b>ストップ</b>を押すとマイク入力を終了し、ボタンは再び<b>スタート</b>に戻ります。</li>
     </ol>
 
     <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
@@ -263,19 +266,48 @@ function resize(){
 }
 window.onresize=resize; resize();
 
-async function start(){
-  audioCtx=new AudioContext();
-  stream=await navigator.mediaDevices.getUserMedia({audio:true});
-  const src=audioCtx.createMediaStreamSource(stream);
-  analyser=audioCtx.createAnalyser();
-  analyser.fftSize=2048;
-  src.connect(analyser);
-  dataTime=new Uint8Array(analyser.fftSize);
-  dataFreq=new Uint8Array(analyser.frequencyBinCount);
-  draw();
+let isRunning=false;
+let drawLoopStarted=false;
+
+function setRunningUI(running){
+  isRunning=running;
+  startBtn.textContent=running?"ストップ":"スタート";
+  startBtn.classList.toggle("isRunning",running);
+  startBtn.setAttribute("aria-pressed",running?"true":"false");
 }
-function stop(){stream.getTracks().forEach(t=>t.stop());audioCtx.close();}
-startBtn.onclick=start; stopBtn.onclick=stop;
+
+async function start(){
+  if(isRunning)return;
+  try{
+    audioCtx=new AudioContext();
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const src=audioCtx.createMediaStreamSource(stream);
+    analyser=audioCtx.createAnalyser();
+    analyser.fftSize=2048;
+    src.connect(analyser);
+    dataTime=new Uint8Array(analyser.fftSize);
+    dataFreq=new Uint8Array(analyser.frequencyBinCount);
+    setRunningUI(true);
+    if(!drawLoopStarted){
+      drawLoopStarted=true;
+      draw();
+    }
+  }catch(err){
+    setRunningUI(false);
+    if(audioCtx && audioCtx.state!=="closed")audioCtx.close();
+    audioCtx=null; stream=null; analyser=null;
+    console.error(err);
+  }
+}
+function stop(){
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  if(audioCtx && audioCtx.state!=="closed")audioCtx.close();
+  stream=null;
+  audioCtx=null;
+  analyser=null;
+  setRunningUI(false);
+}
+startBtn.onclick=()=>isRunning?stop():start();
 
 snapBtn.onclick=()=>{
   if(!analyser)return;

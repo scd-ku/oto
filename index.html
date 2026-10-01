@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>サウンド観察ラボ</title>
+<title>音の観察</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -25,11 +25,23 @@ canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ff
   box-shadow:none;cursor:pointer;
 }
 .deleteBtn:hover{background:#fff1f3;}
-.deleteBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
-.lineWidthControl{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;background:#fff;border:1px solid #dfe4ff;border-radius:18px;}
-.lineWidthControl label{font-size:12px;font-weight:700;white-space:nowrap;}
-.lineWidthControl input[type=range]{width:110px;accent-color:#7b8cff;}
-#lineWidthValue{min-width:2.2em;font-size:12px;font-weight:700;text-align:right;}
+.visibilityBtn,.deleteBtn{
+  width:32px;height:32px;padding:0;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:#fff;box-shadow:none;cursor:pointer;
+}
+.visibilityBtn{color:#50607a;border:1px solid #dce2ee;}
+.visibilityBtn.off{color:#9aa2b1;background:#f5f6f9;}
+.visibilityBtn:hover{background:#f1f5fb;}
+.visibilityBtn svg,.deleteBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.settingsPanel{width:min(92vw,460px);}
+.settingRow{padding:14px 0;border-top:1px solid #edf0f7;}
+.settingRow:first-of-type{border-top:none;}
+.settingLabel{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:8px;}
+.settingLabel label{font-weight:700;}
+.settingLabel span{font-size:13px;color:#667;min-width:62px;text-align:right;font-variant-numeric:tabular-nums;}
+.settingRow input[type=range]{width:100%;accent-color:#7b8cff;}
+.settingRow small{display:block;color:#778;margin-top:7px;line-height:1.5;}
 #snapshots{
   margin:12px;background:rgba(255,255,255,.72);border-radius:16px;
   padding:10px 12px;font-size:13px;box-shadow:0 4px 14px rgba(51,51,68,.05);
@@ -137,12 +149,18 @@ header{
         <path d="M15 15h3v3h3M21 15v2M15 21h3M18 18v3"></path>
       </svg>
     </button>
-    <h1>サウンド観察ラボ</h1>
+    <h1>音の観察</h1>
     <button class="iconBtn" id="helpBtn" aria-label="ヘルプを表示" title="ヘルプ">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="9"></circle>
         <path d="M9.8 9.2a2.4 2.4 0 0 1 4.6 1c0 1.8-2.4 2.1-2.4 4"></path>
         <path d="M12 17.5h.01"></path>
+      </svg>
+    </button>
+    <button class="iconBtn" id="settingsBtn" aria-label="設定を表示" title="設定">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3V9.6h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.1.38.31.73.6 1 .3.27.68.42 1.1.4h.1v4h-.1c-.42-.02-.8.13-1.1.4-.29.27-.5.62-.6 1z"></path>
       </svg>
     </button>
   </div>
@@ -152,11 +170,6 @@ header{
     <button id="snapBtn">記録</button>
     <input type="color" id="colorPicker" value="#ff7eb6">
     <button id="clearColor">透明</button>
-    <div class="lineWidthControl" title="波形の線の太さ">
-      <label for="lineWidthSlider">線の太さ</label>
-      <input type="range" id="lineWidthSlider" min="1" max="6" step="0.5" value="2">
-      <span id="lineWidthValue">2.0</span>
-    </div>
   </div>
 
   <div class="viewControls">
@@ -187,14 +200,14 @@ header{
 <div class="modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
   <div class="modalPanel">
     <button class="closeBtn" data-close="helpModal" aria-label="閉じる">×</button>
-    <h2 id="helpTitle">サウンド観察ラボの使い方</h2>
+    <h2 id="helpTitle">音の観察の使い方</h2>
 
     <h3>このアプリの特徴</h3>
     <ul>
       <li>マイクから入力した音をリアルタイムで可視化できます。</li>
       <li>時間波形・極座標・リサージュ・スペクトルの4種類の表示を切り替えられます。</li>
       <li>波形を「記録」として保存し、現在の音と重ねて比較できます。記録線には自動で異なる色と破線パターンを割り当てます。</li>
-      <li>現在の波形は太めの実線、記録した波形は色分けした破線で表示します。各記録は個別に色変更・削除でき、時間波形では位相もずらせます。</li>
+      <li>現在の波形は太めの実線、記録した波形は色分けした破線で表示します。各記録は個別に表示／非表示・色変更・削除ができ、時間波形では位相もずらせます。</li>
     </ul>
 
     <h3>基本的な使い方</h3>
@@ -204,10 +217,44 @@ header{
       <li>色を選ぶと現在の波形の色を変更できます。記録線の色は記録後に個別に変更できます。</li>
       <li><b>記録</b>を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
       <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
-      <li>保存した波形は各行のゴミ箱ボタンで個別に削除できます。ヘッダの<b>線の太さ</b>で描画線幅を調整できます。入力中の<b>ストップ</b>を押すとマイク入力を終了し、ボタンは再び<b>スタート</b>に戻ります。</li>
+      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。ヘッダの設定アイコンから<b>線の太さ・振幅・時間幅</b>を調整できます。入力中の<b>ストップ</b>を押すとマイク入力を終了し、ボタンは再び<b>スタート</b>に戻ります。</li>
     </ol>
 
     <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
+  </div>
+</div>
+
+
+<div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="modalPanel settingsPanel">
+    <button class="closeBtn" data-close="settingsModal" aria-label="閉じる">×</button>
+    <h2 id="settingsTitle">グラフ設定</h2>
+
+    <div class="settingRow">
+      <div class="settingLabel">
+        <label for="lineWidthSlider">線の太さ</label>
+        <span id="lineWidthValue">2.0 px</span>
+      </div>
+      <input type="range" id="lineWidthSlider" min="1" max="6" step="0.5" value="2">
+    </div>
+
+    <div class="settingRow">
+      <div class="settingLabel">
+        <label for="amplitudeSlider">振幅</label>
+        <span id="amplitudeValue">1.0×</span>
+      </div>
+      <input type="range" id="amplitudeSlider" min="0.25" max="3" step="0.05" value="1">
+      <small>波形の縦方向の拡大率を変更します。</small>
+    </div>
+
+    <div class="settingRow">
+      <div class="settingLabel">
+        <label for="timeWindowSlider">時間幅</label>
+        <span id="timeWindowValue">50 ms</span>
+      </div>
+      <input type="range" id="timeWindowSlider" min="5" max="150" step="5" value="50">
+      <small>時間波形に表示する横方向の時間範囲を変更します。</small>
+    </div>
   </div>
 </div>
 
@@ -226,6 +273,8 @@ let audioCtx, analyser, dataTime, dataFreq, stream;
 let snapshots=[];
 let currentColor="#ff7eb6";
 let lineWidth=2;
+let amplitudeScale=1;
+let timeWindowMs=50;
 let recordCounter=0;
 const recordColors=["#0066cc","#e85d04","#6a4c93","#00875a","#d00070","#6b5b00","#00a6a6","#c2410c"];
 const recordDashes=[[10,5],[3,4],[14,4,3,4],[7,3,2,3],[16,5],[4,3,10,3]];
@@ -234,9 +283,22 @@ clearColor.onclick=()=>{currentColor="transparent";syncCurrentLegend();};
 colorPicker.oninput=e=>{currentColor=e.target.value;syncCurrentLegend();};
 const lineWidthSlider=document.getElementById("lineWidthSlider");
 const lineWidthValue=document.getElementById("lineWidthValue");
+const amplitudeSlider=document.getElementById("amplitudeSlider");
+const amplitudeValue=document.getElementById("amplitudeValue");
+const timeWindowSlider=document.getElementById("timeWindowSlider");
+const timeWindowValue=document.getElementById("timeWindowValue");
+
 lineWidthSlider.oninput=e=>{
   lineWidth=parseFloat(e.target.value);
-  lineWidthValue.textContent=lineWidth.toFixed(1);
+  lineWidthValue.textContent=lineWidth.toFixed(1)+" px";
+};
+amplitudeSlider.oninput=e=>{
+  amplitudeScale=parseFloat(e.target.value);
+  amplitudeValue.textContent=amplitudeScale.toFixed(2).replace(/0$/,"")+"×";
+};
+timeWindowSlider.oninput=e=>{
+  timeWindowMs=parseInt(e.target.value);
+  timeWindowValue.textContent=timeWindowMs+" ms";
 };
 function syncCurrentLegend(){
   document.documentElement.style.setProperty("--current-color",currentColor==="transparent"?"#999":currentColor);
@@ -245,8 +307,10 @@ syncCurrentLegend();
 
 const qrModal=document.getElementById("qrModal");
 const helpModal=document.getElementById("helpModal");
+const settingsModal=document.getElementById("settingsModal");
 qrBtn.onclick=()=>qrModal.classList.add("open");
 helpBtn.onclick=()=>helpModal.classList.add("open");
+settingsBtn.onclick=()=>settingsModal.classList.add("open");
 document.querySelectorAll("[data-close]").forEach(btn=>{
   btn.addEventListener("click",()=>document.getElementById(btn.dataset.close).classList.remove("open"));
 });
@@ -283,7 +347,7 @@ async function start(){
     stream=await navigator.mediaDevices.getUserMedia({audio:true});
     const src=audioCtx.createMediaStreamSource(stream);
     analyser=audioCtx.createAnalyser();
-    analyser.fftSize=2048;
+    analyser.fftSize=8192;
     src.connect(analyser);
     dataTime=new Uint8Array(analyser.fftSize);
     dataFreq=new Uint8Array(analyser.frequencyBinCount);
@@ -320,6 +384,7 @@ snapBtn.onclick=()=>{
     color:recordColors[n%recordColors.length],
     dash:recordDashes[n%recordDashes.length],
     shift:0,
+    visible:true,
     id:n+1
   });
   updateSnapshotUI();
@@ -380,7 +445,7 @@ function updateSnapshotUI(){
 
       const slider=document.createElement("input");
       slider.type="range";
-      slider.min=-1024; slider.max=1024; slider.value=s.shift;
+      slider.min=-4096; slider.max=4096; slider.value=s.shift;
       slider.oninput=e=>s.shift=parseInt(e.target.value);
       div.appendChild(slider);
     }else{
@@ -388,6 +453,30 @@ function updateSnapshotUI(){
       spacer.style.flex="1";
       div.appendChild(spacer);
     }
+
+    const visibility=document.createElement("button");
+    visibility.className="visibilityBtn"+(s.visible===false?" off":"");
+    visibility.title=s.visible===false?"この記録を表示":"この記録を非表示";
+    visibility.setAttribute("aria-label",visibility.title);
+    visibility.setAttribute("aria-pressed",s.visible===false?"false":"true");
+    const setEyeIcon=()=>{
+      visibility.innerHTML=s.visible===false
+        ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 4.3A10.8 10.8 0 0 1 12 4c5 0 9 5 9 5a16 16 0 0 1-2.1 2.4"></path><path d="M6.6 6.6C4.5 8 3 10 3 10s4 5 9 5c1.2 0 2.3-.3 3.4-.8"></path></svg>`
+        : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>`;
+    };
+    setEyeIcon();
+    visibility.onclick=()=>{
+      s.visible=!(s.visible!==false);
+      visibility.classList.toggle("off",s.visible===false);
+      visibility.title=s.visible===false?"この記録を表示":"この記録を非表示";
+      visibility.setAttribute("aria-label",visibility.title);
+      visibility.setAttribute("aria-pressed",s.visible===false?"false":"true");
+      setEyeIcon();
+      sample.style.opacity=s.visible===false?".28":"1";
+      name.style.opacity=s.visible===false?".45":"1";
+    };
+    if(s.visible===false){sample.style.opacity=".28";name.style.opacity=".45";}
+    div.appendChild(visibility);
 
     const del=document.createElement("button");
     del.className="deleteBtn";
@@ -426,7 +515,7 @@ function draw(){
 
   // ===== 目盛 =====
   if(mode==="wave"){
-    const duration=dataTime.length/audioCtx.sampleRate*1000;
+    const duration=Math.min(timeWindowMs,dataTime.length/audioCtx.sampleRate*1000);
     for(let i=0;i<=10;i++){
       let x=i*w/10;
       ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
@@ -435,7 +524,7 @@ function draw(){
     for(let j=0;j<=8;j++){
       let y=j*h/8;
       ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
-      ctx.fillText(((1-j/8)*2-1).toFixed(1),-45,y+4);
+      ctx.fillText((((1-j/8)*2-1)/amplitudeScale).toFixed(2),-45,y+4);
     }
   }
 
@@ -449,7 +538,7 @@ function draw(){
     for(let j=0;j<=8;j++){
       let y=j*h/8;
       ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
-      ctx.fillText((100-j*12.5).toFixed(0),-45,y+4);
+      ctx.fillText(((100-j*12.5)/amplitudeScale).toFixed(0),-45,y+4);
     }
   }
 
@@ -457,12 +546,12 @@ function draw(){
     for(let i=0;i<=8;i++){
       let x=i*w/8;
       ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
-      ctx.fillText((i/8*2-1).toFixed(1),x-10,h+15);
+      ctx.fillText(((i/8*2-1)/amplitudeScale).toFixed(2),x-10,h+15);
     }
     for(let j=0;j<=8;j++){
       let y=j*h/8;
       ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
-      ctx.fillText(((1-j/8)*2-1).toFixed(1),-45,y+4);
+      ctx.fillText((((1-j/8)*2-1)/amplitudeScale).toFixed(2),-45,y+4);
     }
   }
 
@@ -470,7 +559,7 @@ function draw(){
     const cx=w/2,cy=h/2,R=Math.min(w,h)*0.35;
     for(let r=0.25;r<=1;r+=0.25){
       ctx.beginPath();ctx.arc(cx,cy,R*r,0,Math.PI*2);ctx.stroke();
-      ctx.fillText(r.toFixed(2),cx+5,cy-R*r);
+      ctx.fillText((r/amplitudeScale).toFixed(2),cx+5,cy-R*r);
     }
     for(let a=0;a<360;a+=30){
       let rad=a*Math.PI/180;
@@ -503,10 +592,12 @@ function draw(){
   }
   function wave(arr,color,shift=0,opts={}){
     if(!beginTrace(color,opts))return;
-    for(let i=0;i<arr.length;i++){
+    const sampleRate=(audioCtx&&audioCtx.sampleRate)||48000;
+    const visibleSamples=Math.min(arr.length,Math.max(32,Math.round(timeWindowMs*sampleRate/1000)));
+    for(let i=0;i<visibleSamples;i++){
       let idx=(i+shift+arr.length)%arr.length;
-      let x=i*w/arr.length;
-      let y=h/2+(arr[idx]-128)/128*h*0.4;
+      let x=visibleSamples>1?i*w/(visibleSamples-1):0;
+      let y=h/2+(arr[idx]-128)/128*h*0.4*amplitudeScale;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
     endTrace();
@@ -516,7 +607,7 @@ function draw(){
     const cx=w/2,cy=h/2,R=Math.min(w,h)*0.35;
     for(let i=0;i<arr.length;i++){
       let ang=i/arr.length*Math.PI*2;
-      let amp=(arr[i]-128)/128;
+      let amp=(arr[i]-128)/128*amplitudeScale;
       let r=R*(0.6+amp*0.4);
       let x=cx+Math.cos(ang)*r,y=cy+Math.sin(ang)*r;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
@@ -527,8 +618,8 @@ function draw(){
   function liss(arr,color,opts={}){
     if(!beginTrace(color,opts))return;
     for(let i=0;i<arr.length;i++){
-      let x=(arr[i]-128)/128;
-      let y=(arr[(i+100)%arr.length]-128)/128;
+      let x=(arr[i]-128)/128*amplitudeScale;
+      let y=(arr[(i+100)%arr.length]-128)/128*amplitudeScale;
       x=w/2+x*w*0.4; y=h/2+y*h*0.4;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
@@ -538,13 +629,14 @@ function draw(){
     if(!beginTrace(color,opts))return;
     for(let i=0;i<arr.length;i++){
       let x=i*w/arr.length;
-      let y=h-arr[i]/255*h*0.9;
+      let y=h-arr[i]/255*h*0.9*amplitudeScale;
       i?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
     endTrace();
   }
 
   snapshots.forEach(s=>{
+    if(s.visible===false)return;
     const opts={width:lineWidth,dash:s.dash||[9,5],alpha:.88};
     if(mode==="wave") wave(s.time,s.color,s.shift,opts);
     if(mode==="polar") polar(s.time,s.color,opts);

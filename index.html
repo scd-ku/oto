@@ -15,7 +15,7 @@ body{margin:0;font-family:"M PLUS Rounded 1c",sans-serif;background:linear-gradi
 header{padding:12px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;}
 button,select,input[type=color]{border:none;border-radius:20px;padding:8px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-weight:700;cursor:pointer;}
 .card{margin:12px;background:var(--card);border-radius:20px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,.08);}
-canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ffffff,#eef1ff);}
+canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ffffff,#eef1ff);cursor:crosshair;}
 #snapshots{margin:10px;font-size:13px;}
 .phaseCtrl{display:flex;align-items:center;gap:6px;margin:4px 0;}
 .deleteBtn{
@@ -169,7 +169,6 @@ header{
     <button id="startBtn" aria-pressed="false">スタート</button>
     <button id="snapBtn">記録</button>
     <input type="color" id="colorPicker" value="#ff7eb6">
-    <button id="clearColor">透明</button>
   </div>
 
   <div class="viewControls">
@@ -217,7 +216,7 @@ header{
       <li>色を選ぶと現在の波形の色を変更できます。記録線の色は記録後に個別に変更できます。</li>
       <li><b>記録</b>を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
       <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
-      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。ヘッダの設定アイコンから<b>線の太さ・振幅・時間幅</b>を調整できます。入力中の<b>ストップ</b>を押すとマイク入力を終了し、ボタンは再び<b>スタート</b>に戻ります。</li>
+      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。グラフをクリックすると縦の波線を置け、2本あるとその間を強調表示します。3回目以降は直前の線と新しい線の区間に更新され、各線上部のゴミ箱で個別に削除できます。ヘッダの設定アイコンから<b>線の太さ・振幅（最大5倍）・時間幅</b>を調整できます。入力中の<b>ストップ</b>を押すとマイク入力を終了し、ボタンは再び<b>スタート</b>に戻ります。</li>
     </ol>
 
     <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
@@ -243,7 +242,7 @@ header{
         <label for="amplitudeSlider">振幅</label>
         <span id="amplitudeValue">1.0×</span>
       </div>
-      <input type="range" id="amplitudeSlider" min="0.25" max="3" step="0.05" value="1">
+      <input type="range" id="amplitudeSlider" min="0.25" max="5" step="0.05" value="1">
       <small>波形の縦方向の拡大率を変更します。</small>
     </div>
 
@@ -276,10 +275,14 @@ let lineWidth=2;
 let amplitudeScale=1;
 let timeWindowMs=50;
 let recordCounter=0;
+let lastSampleRate=48000;
+let markerCounter=0;
+let selectionMarkers=[];
+let markerTrashHitAreas=[];
+let plotMetrics={left:70,right:20,top:30,bottom:50,w:0,h:0};
 const recordColors=["#0066cc","#e85d04","#6a4c93","#00875a","#d00070","#6b5b00","#00a6a6","#c2410c"];
 const recordDashes=[[10,5],[3,4],[14,4,3,4],[7,3,2,3],[16,5],[4,3,10,3]];
 
-clearColor.onclick=()=>{currentColor="transparent";syncCurrentLegend();};
 colorPicker.oninput=e=>{currentColor=e.target.value;syncCurrentLegend();};
 const lineWidthSlider=document.getElementById("lineWidthSlider");
 const lineWidthValue=document.getElementById("lineWidthValue");
@@ -301,7 +304,7 @@ timeWindowSlider.oninput=e=>{
   timeWindowValue.textContent=timeWindowMs+" ms";
 };
 function syncCurrentLegend(){
-  document.documentElement.style.setProperty("--current-color",currentColor==="transparent"?"#999":currentColor);
+  document.documentElement.style.setProperty("--current-color",currentColor);
 }
 syncCurrentLegend();
 
@@ -331,7 +334,7 @@ function resize(){
 window.onresize=resize; resize();
 
 let isRunning=false;
-let drawLoopStarted=false;
+let drawLoopStarted=true;
 
 function setRunningUI(running){
   isRunning=running;
@@ -351,11 +354,8 @@ async function start(){
     src.connect(analyser);
     dataTime=new Uint8Array(analyser.fftSize);
     dataFreq=new Uint8Array(analyser.frequencyBinCount);
+    lastSampleRate=audioCtx.sampleRate||48000;
     setRunningUI(true);
-    if(!drawLoopStarted){
-      drawLoopStarted=true;
-      draw();
-    }
   }catch(err){
     setRunningUI(false);
     if(audioCtx && audioCtx.state!=="closed")audioCtx.close();
@@ -392,6 +392,29 @@ snapBtn.onclick=()=>{
 
 modeSel.onchange=updateSnapshotUI;
 updateSnapshotUI();
+
+cv.addEventListener("click",e=>{
+  const rect=cv.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const y=e.clientY-rect.top;
+
+  const trash=markerTrashHitAreas.find(a=>x>=a.x&&x<=a.x+a.w&&y>=a.y&&y<=a.y+a.h);
+  if(trash){
+    selectionMarkers=selectionMarkers.filter(m=>m.id!==trash.id);
+    return;
+  }
+
+  const p=plotMetrics;
+  if(x<p.left||x>p.left+p.w||y<p.top||y>p.top+p.h)return;
+
+  const marker={id:++markerCounter,pos:Math.max(0,Math.min(1,(x-p.left)/p.w))};
+  if(selectionMarkers.length<2){
+    selectionMarkers.push(marker);
+  }else{
+    selectionMarkers=[selectionMarkers[1],marker];
+  }
+});
+draw();
 
 function updateSnapshotUI(){
   const box=document.getElementById("snapshots");
@@ -491,31 +514,49 @@ function updateSnapshotUI(){
 
 function draw(){
   requestAnimationFrame(draw);
-  if(!analyser)return;
-  analyser.getByteTimeDomainData(dataTime);
-  analyser.getByteFrequencyData(dataFreq);
+  if(analyser&&dataTime&&dataFreq){
+    analyser.getByteTimeDomainData(dataTime);
+    analyser.getByteFrequencyData(dataFreq);
+  }
 
   const fullW=cv.width/(window.devicePixelRatio||1);
   const fullH=cv.height/(window.devicePixelRatio||1);
   ctx.clearRect(0,0,fullW,fullH);
 
   const mode=modeSel.value;
+  const sampleRate=(audioCtx&&audioCtx.sampleRate)||lastSampleRate||48000;
 
   // ===== 外側ラベル用マージン =====
   const margin={left:70,right:20,top:30,bottom:50};
-  const w=fullW-margin.left-margin.right;
-  const h=fullH-margin.top-margin.bottom;
+  const w=Math.max(1,fullW-margin.left-margin.right);
+  const h=Math.max(1,fullH-margin.top-margin.bottom);
+  plotMetrics={...margin,w,h};
+  markerTrashHitAreas=[];
 
   ctx.save();
   ctx.translate(margin.left,margin.top);
 
-  ctx.strokeStyle="#e4e8ff";
+  // 2本のマーカー間を先に塗り、グリッドや波形をその上に描く
+  if(selectionMarkers.length===2){
+    const x1=selectionMarkers[0].pos*w;
+    const x2=selectionMarkers[1].pos*w;
+    const left=Math.min(x1,x2);
+    const width=Math.abs(x2-x1);
+    ctx.save();
+    ctx.fillStyle="rgba(126, 200, 255, .18)";
+    ctx.fillRect(left,0,width,h);
+    ctx.restore();
+  }
+
+  ctx.strokeStyle="#d5dced";
+  ctx.lineWidth=1;
+  ctx.setLineDash([]);
   ctx.fillStyle="#445";
   ctx.font="12px 'M PLUS Rounded 1c'";
 
   // ===== 目盛 =====
   if(mode==="wave"){
-    const duration=Math.min(timeWindowMs,dataTime.length/audioCtx.sampleRate*1000);
+    const duration=Math.min(timeWindowMs,((dataTime&&dataTime.length)||8192)/sampleRate*1000);
     for(let i=0;i<=10;i++){
       let x=i*w/10;
       ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
@@ -529,7 +570,7 @@ function draw(){
   }
 
   if(mode==="spectrum"){
-    const nyq=audioCtx.sampleRate/2;
+    const nyq=sampleRate/2;
     for(let i=0;i<=10;i++){
       let x=i*w/10;
       ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
@@ -571,7 +612,6 @@ function draw(){
 
   // ===== グラフ描画 =====
   function beginTrace(color,opts={}){
-    if(color==="transparent")return false;
     ctx.save();
     ctx.strokeStyle=color;
     ctx.lineWidth=opts.width||lineWidth;
@@ -592,8 +632,8 @@ function draw(){
   }
   function wave(arr,color,shift=0,opts={}){
     if(!beginTrace(color,opts))return;
-    const sampleRate=(audioCtx&&audioCtx.sampleRate)||48000;
-    const visibleSamples=Math.min(arr.length,Math.max(32,Math.round(timeWindowMs*sampleRate/1000)));
+    const sr=(audioCtx&&audioCtx.sampleRate)||lastSampleRate||48000;
+    const visibleSamples=Math.min(arr.length,Math.max(32,Math.round(timeWindowMs*sr/1000)));
     for(let i=0;i<visibleSamples;i++){
       let idx=(i+shift+arr.length)%arr.length;
       let x=visibleSamples>1?i*w/(visibleSamples-1):0;
@@ -645,10 +685,58 @@ function draw(){
   });
 
   const currentOpts={width:lineWidth+1.25,dash:[],alpha:1,current:true};
-  if(mode==="wave") wave(dataTime,currentColor,0,currentOpts);
-  if(mode==="polar") polar(dataTime,currentColor,currentOpts);
-  if(mode==="lissajous") liss(dataTime,currentColor,currentOpts);
-  if(mode==="spectrum") spectrum(dataFreq,currentColor,currentOpts);
+  if(analyser&&dataTime&&dataFreq){
+    if(mode==="wave") wave(dataTime,currentColor,0,currentOpts);
+    if(mode==="polar") polar(dataTime,currentColor,currentOpts);
+    if(mode==="lissajous") liss(dataTime,currentColor,currentOpts);
+    if(mode==="spectrum") spectrum(dataFreq,currentColor,currentOpts);
+  }
+
+  // ===== 区間マーカー =====
+  selectionMarkers.forEach(marker=>{
+    const x=marker.pos*w;
+
+    // 縦の波線
+    ctx.save();
+    ctx.strokeStyle="#59677f";
+    ctx.lineWidth=1.6;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for(let yy=28;yy<=h;yy+=2){
+      const xx=x+Math.sin(yy*.28)*2.2;
+      if(yy===28)ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
+    }
+    ctx.stroke();
+
+    // マーカー上部の削除ボタン
+    const bx=Math.max(1,Math.min(w-25,x-12));
+    const by=2,bw=24,bh=22;
+    ctx.fillStyle="rgba(255,255,255,.96)";
+    ctx.strokeStyle="#d8dde8";
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.rect(bx,by,bw,bh);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle="#a33";
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(bx+7,by+8);ctx.lineTo(bx+17,by+8);
+    ctx.moveTo(bx+9,by+8);ctx.lineTo(bx+10,by+17);
+    ctx.lineTo(bx+14,by+17);ctx.lineTo(bx+15,by+8);
+    ctx.moveTo(bx+10,by+6);ctx.lineTo(bx+14,by+6);
+    ctx.stroke();
+    ctx.restore();
+
+    markerTrashHitAreas.push({
+      id:marker.id,
+      x:margin.left+bx,
+      y:margin.top+by,
+      w:bw,
+      h:bh
+    });
+  });
 
   ctx.restore();
 

@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>サウンド観察ラボ</title>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg1:#f7f8ff; --bg2:#e6e9ff; --card:#ffffffdd;
+  --ink:#334; --accent:#ff7eb6; --accent2:#7ec8ff; --grid:#ccd3ff;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:"M PLUS Rounded 1c",sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:var(--ink);}
+header{padding:12px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;}
+button,select,input[type=color]{border:none;border-radius:20px;padding:8px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-weight:700;cursor:pointer;}
+.card{margin:12px;background:var(--card);border-radius:20px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,.08);}
+canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ffffff,#eef1ff);}
+#snapshots{margin:10px;font-size:13px;}
+.phaseCtrl{display:flex;align-items:center;gap:6px;margin:4px 0;}
+.deleteBtn{cursor:pointer;color:#c33;font-weight:bold;}
+
+body{min-height:100vh;padding-bottom:46px;}
+header{
+  padding:12px;
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:10px 16px;
+  align-items:center;
+}
+.brandbar{
+  grid-column:1 / -1;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-height:42px;
+}
+.brandbar h1{
+  margin:0;
+  font-size:clamp(20px,3vw,28px);
+  line-height:1.2;
+  letter-spacing:.02em;
+}
+.headerControls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.viewControls{display:flex;gap:8px;align-items:center;justify-self:end;}
+.iconBtn{
+  width:36px;height:36px;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:#fff;color:var(--ink);
+  border:1px solid #dfe4ff;
+  box-shadow:0 3px 10px rgba(51,51,68,.08);
+}
+.iconBtn:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(51,51,68,.13);}
+.iconBtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.modal{
+  position:fixed;inset:0;z-index:1000;
+  display:none;align-items:center;justify-content:center;
+  padding:20px;background:rgba(32,35,58,.38);
+  backdrop-filter:blur(4px);
+}
+.modal.open{display:flex;}
+.modalPanel{
+  width:min(92vw,520px);max-height:86vh;overflow:auto;
+  background:#fff;border-radius:18px;padding:22px;
+  box-shadow:0 20px 60px rgba(24,27,48,.22);
+  position:relative;
+}
+.modalPanel h2{margin:0 42px 14px 0;font-size:22px;}
+.modalPanel h3{font-size:16px;margin:18px 0 8px;}
+.modalPanel p,.modalPanel li{line-height:1.75;}
+.modalPanel ul,.modalPanel ol{padding-left:1.4em;}
+.closeBtn{
+  position:absolute;right:12px;top:12px;width:34px;height:34px;
+  padding:0;border-radius:50%;background:#eef1ff;color:#445;
+  font-size:20px;line-height:1;
+}
+.qrWrap{text-align:center;}
+.qrWrap img{
+  width:min(72vw,320px);height:auto;background:#fff;
+  border:10px solid #fff;border-radius:14px;
+  box-shadow:0 8px 24px rgba(51,51,68,.12);
+}
+.qrUrl{font-size:13px;word-break:break-all;margin-top:12px;}
+.qrUrl a{color:#4b63b8;}
+.copyright{
+  position:fixed;right:12px;bottom:8px;z-index:20;
+  font-size:11px;color:#667;opacity:.82;
+  background:rgba(255,255,255,.72);padding:4px 8px;border-radius:10px;
+  backdrop-filter:blur(4px);
+}
+@media(max-width:720px){
+  header{grid-template-columns:1fr;}
+  .viewControls{justify-self:start;}
+  .copyright{position:static;margin:8px 12px 12px;text-align:right;background:transparent;}
+  body{padding-bottom:0;}
+}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brandbar">
+    <button class="iconBtn" id="qrBtn" aria-label="QRコードを表示" title="QRコード">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="3" width="6" height="6" rx="1"></rect>
+        <rect x="15" y="3" width="6" height="6" rx="1"></rect>
+        <rect x="3" y="15" width="6" height="6" rx="1"></rect>
+        <path d="M15 15h3v3h3M21 15v2M15 21h3M18 18v3"></path>
+      </svg>
+    </button>
+    <h1>サウンド観察ラボ</h1>
+    <button class="iconBtn" id="helpBtn" aria-label="ヘルプを表示" title="ヘルプ">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M9.8 9.2a2.4 2.4 0 0 1 4.6 1c0 1.8-2.4 2.1-2.4 4"></path>
+        <path d="M12 17.5h.01"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div class="headerControls">
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn">ストップ</button>
+    <button id="snapBtn">📷</button>
+    <input type="color" id="colorPicker" value="#ff7eb6">
+    <button id="clearColor">透明</button>
+  </div>
+
+  <div class="viewControls">
+    <span>表示：</span>
+    <select id="modeSel">
+      <option value="wave">時間波形</option>
+      <option value="polar">極座標</option>
+      <option value="lissajous">リサージュ</option>
+      <option value="spectrum">スペクトル</option>
+    </select>
+  </div>
+</header>
+
+
+<div class="modal" id="qrModal" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+  <div class="modalPanel qrWrap">
+    <button class="closeBtn" data-close="qrModal" aria-label="閉じる">×</button>
+    <h2 id="qrTitle">このアプリのQRコード</h2>
+    <img
+      src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=10&data=https%3A%2F%2Fscd-ku.github.io%2Foto%2F"
+      alt="https://scd-ku.github.io/oto/ のQRコード"
+      width="320" height="320"
+    >
+    <div class="qrUrl"><a href="https://scd-ku.github.io/oto/" target="_blank" rel="noopener">https://scd-ku.github.io/oto/</a></div>
+  </div>
+</div>
+
+<div class="modal" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="modalPanel">
+    <button class="closeBtn" data-close="helpModal" aria-label="閉じる">×</button>
+    <h2 id="helpTitle">サウンド観察ラボの使い方</h2>
+
+    <h3>このアプリの特徴</h3>
+    <ul>
+      <li>マイクから入力した音をリアルタイムで可視化できます。</li>
+      <li>時間波形・極座標・リサージュ・スペクトルの4種類の表示を切り替えられます。</li>
+      <li>波形をスナップショットとして保存し、現在の音と重ねて比較できます。</li>
+      <li>保存した波形ごとに色を変え、時間波形では位相をずらして比較できます。</li>
+    </ul>
+
+    <h3>基本的な使い方</h3>
+    <ol>
+      <li><b>スタート</b>を押し、ブラウザから求められたマイク使用を許可します。</li>
+      <li><b>表示</b>から観察したいグラフを選びます。</li>
+      <li>色を選ぶと、現在の波形と保存するスナップショットの色を変更できます。</li>
+      <li>📷を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
+      <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
+      <li>保存した波形は ❌ で削除できます。<b>ストップ</b>でマイク入力を終了します。</li>
+    </ol>
+
+    <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
+  </div>
+</div>
+
+<div class="card">
+  <canvas id="cv"></canvas>
+</div>
+
+<div id="snapshots"></div>
+
+<div class="copyright">© Science Comunication Design Laboratory, Kagawa University</div>
+
+<script>
+const cv=document.getElementById("cv");
+const ctx=cv.getContext("2d");
+let audioCtx, analyser, dataTime, dataFreq, stream;
+let snapshots=[];
+let currentColor="#ff7eb6";
+
+colorPicker.oninput=e=>currentColor=e.target.value;
+clearColor.onclick=()=>currentColor="transparent";
+
+const qrModal=document.getElementById("qrModal");
+const helpModal=document.getElementById("helpModal");
+qrBtn.onclick=()=>qrModal.classList.add("open");
+helpBtn.onclick=()=>helpModal.classList.add("open");
+document.querySelectorAll("[data-close]").forEach(btn=>{
+  btn.addEventListener("click",()=>document.getElementById(btn.dataset.close).classList.remove("open"));
+});
+document.querySelectorAll(".modal").forEach(modal=>{
+  modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.remove("open");});
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape")document.querySelectorAll(".modal.open").forEach(m=>m.classList.remove("open"));
+});
+
+
+function resize(){
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.clientWidth*dpr;
+  cv.height=cv.clientHeight*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.onresize=resize; resize();
+
+async function start(){
+  audioCtx=new AudioContext();
+  stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  const src=audioCtx.createMediaStreamSource(stream);
+  analyser=audioCtx.createAnalyser();
+  analyser.fftSize=2048;
+  src.connect(analyser);
+  dataTime=new Uint8Array(analyser.fftSize);
+  dataFreq=new Uint8Array(analyser.frequencyBinCount);
+  draw();
+}
+function stop(){stream.getTracks().forEach(t=>t.stop());audioCtx.close();}
+startBtn.onclick=start; stopBtn.onclick=stop;
+
+snapBtn.onclick=()=>{
+  analyser.getByteTimeDomainData(dataTime);
+  analyser.getByteFrequencyData(dataFreq);
+  snapshots.push({time:new Uint8Array(dataTime),freq:new Uint8Array(dataFreq),color:currentColor,shift:0});
+  updateSnapshotUI();
+};
+
+modeSel.onchange=updateSnapshotUI;
+
+function updateSnapshotUI(){
+  const box=document.getElementById("snapshots");
+  box.innerHTML="<b>保存したスナップショット：</b>";
+  const mode=modeSel.value;
+
+  snapshots.forEach((s,i)=>{
+    const div=document.createElement("div");
+    div.className="phaseCtrl";
+    div.innerHTML=`<span style="color:${s.color}">■</span> #${i+1}`;
+
+    if(mode==="wave"){
+      const slider=document.createElement("input");
+      slider.type="range"; slider.min=-1024; slider.max=1024; slider.value=s.shift;
+      slider.oninput=e=>s.shift=parseInt(e.target.value);
+      div.appendChild(document.createTextNode(" 位相"));
+      div.appendChild(slider);
+    }
+
+    const del=document.createElement("span");
+    del.textContent=" ❌";
+    del.className="deleteBtn";
+    del.onclick=()=>{snapshots.splice(i,1);updateSnapshotUI();}
+    div.appendChild(del);
+    box.appendChild(div);
+  });
+}
+
+function draw(){
+  requestAnimationFrame(draw);
+  if(!analyser)return;
+  analyser.getByteTimeDomainData(dataTime);
+  analyser.getByteFrequencyData(dataFreq);
+
+  const fullW=cv.width/(window.devicePixelRatio||1);
+  const fullH=cv.height/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,fullW,fullH);
+
+  const mode=modeSel.value;
+
+  // ===== 外側ラベル用マージン =====
+  const margin={left:70,right:20,top:30,bottom:50};
+  const w=fullW-margin.left-margin.right;
+  const h=fullH-margin.top-margin.bottom;
+
+  ctx.save();
+  ctx.translate(margin.left,margin.top);
+
+  ctx.strokeStyle="#e4e8ff";
+  ctx.fillStyle="#445";
+  ctx.font="12px 'M PLUS Rounded 1c'";
+
+  // ===== 目盛 =====
+  if(mode==="wave"){
+    const duration=dataTime.length/audioCtx.sampleRate*1000;
+    for(let i=0;i<=10;i++){
+      let x=i*w/10;
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+      ctx.fillText(Math.round(i*duration/10),x-10,h+15);
+    }
+    for(let j=0;j<=8;j++){
+      let y=j*h/8;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+      ctx.fillText(((1-j/8)*2-1).toFixed(1),-45,y+4);
+    }
+  }
+
+  if(mode==="spectrum"){
+    const nyq=audioCtx.sampleRate/2;
+    for(let i=0;i<=10;i++){
+      let x=i*w/10;
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+      ctx.fillText(Math.round(i*nyq/10),x-10,h+15);
+    }
+    for(let j=0;j<=8;j++){
+      let y=j*h/8;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+      ctx.fillText((100-j*12.5).toFixed(0),-45,y+4);
+    }
+  }
+
+  if(mode==="lissajous"){
+    for(let i=0;i<=8;i++){
+      let x=i*w/8;
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+      ctx.fillText((i/8*2-1).toFixed(1),x-10,h+15);
+    }
+    for(let j=0;j<=8;j++){
+      let y=j*h/8;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+      ctx.fillText(((1-j/8)*2-1).toFixed(1),-45,y+4);
+    }
+  }
+
+  if(mode==="polar"){
+    const cx=w/2,cy=h/2,R=Math.min(w,h)*0.35;
+    for(let r=0.25;r<=1;r+=0.25){
+      ctx.beginPath();ctx.arc(cx,cy,R*r,0,Math.PI*2);ctx.stroke();
+      ctx.fillText(r.toFixed(2),cx+5,cy-R*r);
+    }
+    for(let a=0;a<360;a+=30){
+      let rad=a*Math.PI/180;
+      ctx.beginPath();ctx.moveTo(cx,cy);
+      ctx.lineTo(cx+Math.cos(rad)*R,cy+Math.sin(rad)*R);ctx.stroke();
+      ctx.fillText(a+"°",cx+Math.cos(rad)*(R+12),cy+Math.sin(rad)*(R+12));
+    }
+  }
+
+  // ===== グラフ描画 =====
+  function wave(arr,color,shift=0){
+    if(color==="transparent")return;
+    ctx.strokeStyle=color; ctx.beginPath();
+    for(let i=0;i<arr.length;i++){
+      let idx=(i+shift+arr.length)%arr.length;
+      let x=i*w/arr.length;
+      let y=h/2+(arr[idx]-128)/128*h*0.4;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    } ctx.stroke();
+  }
+  function polar(arr,color){
+    if(color==="transparent")return;
+    const cx=w/2,cy=h/2,R=Math.min(w,h)*0.35;
+    ctx.strokeStyle=color; ctx.beginPath();
+    for(let i=0;i<arr.length;i++){
+      let ang=i/arr.length*Math.PI*2;
+      let amp=(arr[i]-128)/128;
+      let r=R*(0.6+amp*0.4);
+      let x=cx+Math.cos(ang)*r,y=cy+Math.sin(ang)*r;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.closePath(); ctx.stroke();
+  }
+  function liss(arr,color){
+    if(color==="transparent")return;
+    ctx.strokeStyle=color; ctx.beginPath();
+    for(let i=0;i<arr.length;i++){
+      let x=(arr[i]-128)/128;
+      let y=(arr[(i+100)%arr.length]-128)/128;
+      x=w/2+x*w*0.4; y=h/2+y*h*0.4;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+  }
+  function spectrum(arr,color){
+    if(color==="transparent")return;
+    ctx.strokeStyle=color; ctx.beginPath();
+    for(let i=0;i<arr.length;i++){
+      let x=i*w/arr.length;
+      let y=h-arr[i]/255*h*0.9;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  snapshots.forEach(s=>{
+    if(mode==="wave") wave(s.time,s.color,s.shift);
+    if(mode==="polar") polar(s.time,s.color);
+    if(mode==="lissajous") liss(s.time,s.color);
+    if(mode==="spectrum") spectrum(s.freq,s.color);
+  });
+
+  if(mode==="wave") wave(dataTime,currentColor);
+  if(mode==="polar") polar(dataTime,currentColor);
+  if(mode==="lissajous") liss(dataTime,currentColor);
+  if(mode==="spectrum") spectrum(dataFreq,currentColor);
+
+  ctx.restore();
+
+  // ===== 軸キャプション（外側） =====
+  ctx.fillStyle="#334";
+  ctx.font="14px 'M PLUS Rounded 1c'";
+  if(mode==="wave"){
+    ctx.fillText("時間 (ms)", fullW/2-35, fullH-10);
+    ctx.save();ctx.rotate(-Math.PI/2);
+    ctx.fillText("振幅", -fullH/2, 20);
+    ctx.restore();
+  }
+  if(mode==="spectrum"){
+    ctx.fillText("周波数 (Hz)", fullW/2-40, fullH-10);
+    ctx.save();ctx.rotate(-Math.PI/2);
+    ctx.fillText("強度 (%)", -fullH/2, 20);
+    ctx.restore();
+  }
+  if(mode==="lissajous"){
+    ctx.fillText("X振幅", fullW/2-20, fullH-10);
+    ctx.save();ctx.rotate(-Math.PI/2);
+    ctx.fillText("Y振幅", -fullH/2, 20);
+    ctx.restore();
+  }
+  if(mode==="polar"){
+    ctx.fillText("角度 (°)", fullW/2-25, 20);
+    ctx.fillText("半径スケール", fullW-130, fullH/2);
+  }
+}
+</script>
+</body>
+</html>

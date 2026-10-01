@@ -15,7 +15,7 @@ body{margin:0;font-family:"M PLUS Rounded 1c",sans-serif;background:linear-gradi
 header{padding:12px;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;}
 button,select,input[type=color]{border:none;border-radius:20px;padding:8px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-weight:700;cursor:pointer;}
 .card{margin:12px;background:var(--card);border-radius:20px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,.08);}
-canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ffffff,#eef1ff);cursor:crosshair;}
+canvas{width:100%;height:480px;border-radius:16px;background:linear-gradient(#ffffff,#eef1ff);cursor:crosshair;touch-action:none;}
 #snapshots{margin:10px;font-size:13px;}
 .phaseCtrl{display:flex;align-items:center;gap:6px;margin:4px 0;}
 .deleteBtn{
@@ -211,12 +211,12 @@ header{
 
     <h3>基本的な使い方</h3>
     <ol>
-      <li><b>スタート</b>を押し、ブラウザから求められたマイク使用を許可します。入力中は同じボタンが<b>ストップ</b>に切り替わります。</li>
+      <li><b>スタート</b>を押し、ブラウザから求められたマイク使用を許可します。入力中は同じボタンが<b>ポーズ</b>に切り替わり、押すと波形をその場で固定します。もう一度<b>再開</b>を押すとリアルタイム表示に戻ります。</li>
       <li><b>表示</b>から観察したいグラフを選びます。</li>
       <li>色を選ぶと現在の波形の色を変更できます。記録線の色は記録後に個別に変更できます。</li>
       <li><b>記録</b>を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
       <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
-      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。グラフをクリックすると縦の波線を置け、2本あるとその間を強調表示します。3回目以降は直前の線と新しい線の区間に更新され、各線上部のゴミ箱で個別に削除できます。ヘッダの設定アイコンから<b>線の太さ・振幅（最大5倍）・時間幅</b>を調整できます。入力中の<b>ストップ</b>を押すとマイク入力を終了し、ボタンは再び<b>スタート</b>に戻ります。</li>
+      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。グラフをクリックすると縦の破線を置け、2本あるとその間を強調表示します。3回目以降は直前の線と新しい線の区間に更新されます。破線上にカーソルを置くと左右矢印になり、ドラッグして位置を調整できます。各線上部のゴミ箱で個別に削除できます。ヘッダの設定アイコンから<b>線の太さ・振幅（最大5倍）・時間幅</b>を調整できます。<b>ポーズ</b>中もマイク接続は維持され、<b>再開</b>ですぐに観察を続けられます。</li>
     </ol>
 
     <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
@@ -280,6 +280,9 @@ let markerCounter=0;
 let selectionMarkers=[];
 let markerTrashHitAreas=[];
 let plotMetrics={left:70,right:20,top:30,bottom:50,w:0,h:0};
+let draggingMarkerId=null;
+let pointerDownPoint=null;
+let markerDragMoved=false;
 const recordColors=["#0066cc","#e85d04","#6a4c93","#00875a","#d00070","#6b5b00","#00a6a6","#c2410c"];
 const recordDashes=[[10,5],[3,4],[14,4,3,4],[7,3,2,3],[16,5],[4,3,10,3]];
 
@@ -333,18 +336,24 @@ function resize(){
 }
 window.onresize=resize; resize();
 
-let isRunning=false;
+let hasStarted=false;
+let isPaused=false;
 let drawLoopStarted=true;
 
-function setRunningUI(running){
-  isRunning=running;
-  startBtn.textContent=running?"ストップ":"スタート";
-  startBtn.classList.toggle("isRunning",running);
-  startBtn.setAttribute("aria-pressed",running?"true":"false");
+function setTransportUI(){
+  if(!hasStarted){
+    startBtn.textContent="スタート";
+    startBtn.classList.remove("isRunning");
+    startBtn.setAttribute("aria-pressed","false");
+    return;
+  }
+  startBtn.textContent=isPaused?"再開":"ポーズ";
+  startBtn.classList.toggle("isRunning",!isPaused);
+  startBtn.setAttribute("aria-pressed",isPaused?"false":"true");
 }
 
 async function start(){
-  if(isRunning)return;
+  if(hasStarted)return;
   try{
     audioCtx=new AudioContext();
     stream=await navigator.mediaDevices.getUserMedia({audio:true});
@@ -355,28 +364,34 @@ async function start(){
     dataTime=new Uint8Array(analyser.fftSize);
     dataFreq=new Uint8Array(analyser.frequencyBinCount);
     lastSampleRate=audioCtx.sampleRate||48000;
-    setRunningUI(true);
+    hasStarted=true;
+    isPaused=false;
+    setTransportUI();
   }catch(err){
-    setRunningUI(false);
+    hasStarted=false;
+    isPaused=false;
+    setTransportUI();
     if(audioCtx && audioCtx.state!=="closed")audioCtx.close();
     audioCtx=null; stream=null; analyser=null;
     console.error(err);
   }
 }
-function stop(){
-  if(stream)stream.getTracks().forEach(t=>t.stop());
-  if(audioCtx && audioCtx.state!=="closed")audioCtx.close();
-  stream=null;
-  audioCtx=null;
-  analyser=null;
-  setRunningUI(false);
+function togglePause(){
+  if(!hasStarted){
+    start();
+    return;
+  }
+  isPaused=!isPaused;
+  setTransportUI();
 }
-startBtn.onclick=()=>isRunning?stop():start();
+startBtn.onclick=togglePause;
 
 snapBtn.onclick=()=>{
-  if(!analyser)return;
-  analyser.getByteTimeDomainData(dataTime);
-  analyser.getByteFrequencyData(dataFreq);
+  if(!analyser||!dataTime||!dataFreq)return;
+  if(!isPaused){
+    analyser.getByteTimeDomainData(dataTime);
+    analyser.getByteFrequencyData(dataFreq);
+  }
   const n=recordCounter++;
   snapshots.push({
     time:new Uint8Array(dataTime),
@@ -393,26 +408,110 @@ snapBtn.onclick=()=>{
 modeSel.onchange=updateSnapshotUI;
 updateSnapshotUI();
 
-cv.addEventListener("click",e=>{
+function canvasPoint(e){
   const rect=cv.getBoundingClientRect();
-  const x=e.clientX-rect.left;
-  const y=e.clientY-rect.top;
+  return {x:e.clientX-rect.left,y:e.clientY-rect.top};
+}
+function markerAtPoint(x,y,tolerance=8){
+  const p=plotMetrics;
+  if(y<p.top||y>p.top+p.h)return null;
+  let best=null;
+  let bestDist=Infinity;
+  selectionMarkers.forEach(marker=>{
+    const mx=p.left+marker.pos*p.w;
+    const d=Math.abs(x-mx);
+    if(d<=tolerance&&d<bestDist){best=marker;bestDist=d;}
+  });
+  return best;
+}
+function addSelectionMarker(x,y){
+  const p=plotMetrics;
+  if(x<p.left||x>p.left+p.w||y<p.top||y>p.top+p.h)return;
+  const marker={id:++markerCounter,pos:Math.max(0,Math.min(1,(x-p.left)/p.w))};
+  if(selectionMarkers.length<2)selectionMarkers.push(marker);
+  else selectionMarkers=[selectionMarkers[1],marker];
+}
+
+cv.addEventListener("pointerdown",e=>{
+  const {x,y}=canvasPoint(e);
 
   const trash=markerTrashHitAreas.find(a=>x>=a.x&&x<=a.x+a.w&&y>=a.y&&y<=a.y+a.h);
   if(trash){
     selectionMarkers=selectionMarkers.filter(m=>m.id!==trash.id);
+    pointerDownPoint=null;
+    draggingMarkerId=null;
     return;
   }
 
-  const p=plotMetrics;
-  if(x<p.left||x>p.left+p.w||y<p.top||y>p.top+p.h)return;
-
-  const marker={id:++markerCounter,pos:Math.max(0,Math.min(1,(x-p.left)/p.w))};
-  if(selectionMarkers.length<2){
-    selectionMarkers.push(marker);
-  }else{
-    selectionMarkers=[selectionMarkers[1],marker];
+  const marker=markerAtPoint(x,y);
+  if(marker){
+    draggingMarkerId=marker.id;
+    markerDragMoved=false;
+    pointerDownPoint={x,y};
+    cv.setPointerCapture?.(e.pointerId);
+    cv.style.cursor="ew-resize";
+    e.preventDefault();
+    return;
   }
+
+  pointerDownPoint={x,y};
+  draggingMarkerId=null;
+  markerDragMoved=false;
+});
+
+cv.addEventListener("pointermove",e=>{
+  const {x,y}=canvasPoint(e);
+  const p=plotMetrics;
+
+  if(draggingMarkerId!==null){
+    const marker=selectionMarkers.find(m=>m.id===draggingMarkerId);
+    if(marker){
+      const newPos=Math.max(0,Math.min(1,(x-p.left)/p.w));
+      if(pointerDownPoint&&Math.abs(x-pointerDownPoint.x)>2)markerDragMoved=true;
+      marker.pos=newPos;
+    }
+    cv.style.cursor="ew-resize";
+    e.preventDefault();
+    return;
+  }
+
+  const trash=markerTrashHitAreas.find(a=>x>=a.x&&x<=a.x+a.w&&y>=a.y&&y<=a.y+a.h);
+  if(trash){
+    cv.style.cursor="pointer";
+    return;
+  }
+  cv.style.cursor=markerAtPoint(x,y)?"ew-resize":"crosshair";
+});
+
+cv.addEventListener("pointerup",e=>{
+  const {x,y}=canvasPoint(e);
+
+  if(draggingMarkerId!==null){
+    draggingMarkerId=null;
+    pointerDownPoint=null;
+    markerDragMoved=false;
+    cv.releasePointerCapture?.(e.pointerId);
+    cv.style.cursor=markerAtPoint(x,y)?"ew-resize":"crosshair";
+    return;
+  }
+
+  if(pointerDownPoint){
+    const moved=Math.hypot(x-pointerDownPoint.x,y-pointerDownPoint.y);
+    if(moved<5)addSelectionMarker(x,y);
+  }
+  pointerDownPoint=null;
+});
+
+cv.addEventListener("pointercancel",e=>{
+  draggingMarkerId=null;
+  pointerDownPoint=null;
+  markerDragMoved=false;
+  cv.releasePointerCapture?.(e.pointerId);
+  cv.style.cursor="crosshair";
+});
+
+cv.addEventListener("pointerleave",()=>{
+  if(draggingMarkerId===null)cv.style.cursor="crosshair";
 });
 draw();
 
@@ -514,7 +613,7 @@ function updateSnapshotUI(){
 
 function draw(){
   requestAnimationFrame(draw);
-  if(analyser&&dataTime&&dataFreq){
+  if(analyser&&dataTime&&dataFreq&&!isPaused){
     analyser.getByteTimeDomainData(dataTime);
     analyser.getByteFrequencyData(dataFreq);
   }
@@ -696,17 +795,16 @@ function draw(){
   selectionMarkers.forEach(marker=>{
     const x=marker.pos*w;
 
-    // 縦の波線
+    // 縦の破線（カーソルを重ねると左右にドラッグ可能）
     ctx.save();
     ctx.strokeStyle="#59677f";
     ctx.lineWidth=1.6;
-    ctx.setLineDash([]);
+    ctx.setLineDash([7,5]);
     ctx.beginPath();
-    for(let yy=28;yy<=h;yy+=2){
-      const xx=x+Math.sin(yy*.28)*2.2;
-      if(yy===28)ctx.moveTo(xx,yy); else ctx.lineTo(xx,yy);
-    }
+    ctx.moveTo(x,28);
+    ctx.lineTo(x,h);
     ctx.stroke();
+    ctx.setLineDash([]);
 
     // マーカー上部の削除ボタン
     const bx=Math.max(1,Math.min(w-25,x-12));

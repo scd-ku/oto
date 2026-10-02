@@ -215,8 +215,8 @@ header{
       <li><b>表示</b>から観察したいグラフを選びます。</li>
       <li>色を選ぶと現在の波形の色を変更できます。記録線の色は記録後に個別に変更できます。</li>
       <li><b>記録</b>を押すと、その瞬間の波形を保存して重ねて表示できます。</li>
-      <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。</li>
-      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。グラフをクリックすると縦の破線を置け、2本あるとその間を強調表示します。3回目以降は直前の線と新しい線の区間に更新されます。破線上にカーソルを置くと左右矢印になり、ドラッグして位置を調整できます。各線上部のゴミ箱で個別に削除できます。ヘッダの設定アイコンから<b>線の太さ・振幅（最大5倍）・時間幅</b>を調整できます。<b>ポーズ</b>中もマイク接続は維持され、<b>再開</b>ですぐに観察を続けられます。</li>
+      <li>時間波形では、保存後に表示される<b>位相</b>スライダーで波形を左右に移動できます。また、時間波形上の2本の破線で解析する区間を指定できます。</li>
+      <li>保存した波形は各行の目のアイコンで表示／非表示を切り替え、ゴミ箱ボタンで個別に削除できます。時間波形をクリックすると縦の破線を置け、2本あるとその間を強調表示します。3回目以降は直前の線と新しい線の区間に更新されます。破線上にカーソルを置くと左右矢印になり、ドラッグして位置を調整できます。各線上部のゴミ箱で個別に削除できます。<b>極座標・リサージュ・スペクトルでは破線や強調帯は表示せず、時間波形で2本の破線により指定した区間だけを解析して表示します。</b>ヘッダの設定アイコンから<b>線の太さ・振幅（最大5倍）・時間幅</b>を調整できます。<b>ポーズ</b>中もマイク接続は維持され、<b>再開</b>ですぐに観察を続けられます。</li>
     </ol>
 
     <p><small>※ マイク入力はブラウザ上で解析されます。利用時はHTTPS環境とマイク権限が必要です。</small></p>
@@ -405,14 +405,91 @@ snapBtn.onclick=()=>{
   updateSnapshotUI();
 };
 
-modeSel.onchange=updateSnapshotUI;
+modeSel.onchange=()=>{
+  updateSnapshotUI();
+  draggingMarkerId=null;
+  pointerDownPoint=null;
+  cv.style.cursor=modeSel.value==="wave"?"crosshair":"default";
+};
 updateSnapshotUI();
+
+function getSelectedTimeSegment(arr,shift=0,sampleRate=lastSampleRate||48000){
+  if(!arr||!arr.length)return new Uint8Array(0);
+  const visibleSamples=Math.min(arr.length,Math.max(32,Math.round(timeWindowMs*sampleRate/1000)));
+  let start=0;
+  let end=visibleSamples;
+  if(selectionMarkers.length===2){
+    const p1=Math.min(selectionMarkers[0].pos,selectionMarkers[1].pos);
+    const p2=Math.max(selectionMarkers[0].pos,selectionMarkers[1].pos);
+    start=Math.max(0,Math.min(visibleSamples-1,Math.floor(p1*(visibleSamples-1))));
+    end=Math.max(start+2,Math.min(visibleSamples,Math.ceil(p2*(visibleSamples-1))+1));
+  }
+  const out=new Uint8Array(Math.max(0,end-start));
+  for(let i=start;i<end;i++){
+    const idx=(i+shift+arr.length)%arr.length;
+    out[i-start]=arr[idx];
+  }
+  return out;
+}
+
+function spectrumFromTimeSegment(arr){
+  if(!arr||arr.length<8)return new Uint8Array(1);
+  const maxN=Math.min(arr.length,2048);
+  let n=1;
+  while(n*2<=maxN)n*=2;
+  if(n<8)return new Uint8Array(1);
+
+  const re=new Float64Array(n);
+  const im=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    const window=.5-.5*Math.cos(2*Math.PI*i/(n-1));
+    re[i]=((arr[i]-128)/128)*window;
+  }
+
+  for(let i=1,j=0;i<n;i++){
+    let bit=n>>1;
+    for(;j&bit;bit>>=1)j^=bit;
+    j^=bit;
+    if(i<j){
+      const tr=re[i];re[i]=re[j];re[j]=tr;
+      const ti=im[i];im[i]=im[j];im[j]=ti;
+    }
+  }
+
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len;
+    const wlenCos=Math.cos(ang);
+    const wlenSin=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let wr=1,wi=0;
+      for(let j=0;j<len/2;j++){
+        const uRe=re[i+j],uIm=im[i+j];
+        const vRe=re[i+j+len/2]*wr-im[i+j+len/2]*wi;
+        const vIm=re[i+j+len/2]*wi+im[i+j+len/2]*wr;
+        re[i+j]=uRe+vRe; im[i+j]=uIm+vIm;
+        re[i+j+len/2]=uRe-vRe; im[i+j+len/2]=uIm-vIm;
+        const nextWr=wr*wlenCos-wi*wlenSin;
+        wi=wr*wlenSin+wi*wlenCos;
+        wr=nextWr;
+      }
+    }
+  }
+
+  const out=new Uint8Array(n/2);
+  for(let i=0;i<out.length;i++){
+    const mag=Math.max(1e-7,Math.hypot(re[i],im[i])/(n/2));
+    const db=20*Math.log10(mag);
+    out[i]=Math.max(0,Math.min(255,Math.round((db+90)/90*255)));
+  }
+  return out;
+}
 
 function canvasPoint(e){
   const rect=cv.getBoundingClientRect();
   return {x:e.clientX-rect.left,y:e.clientY-rect.top};
 }
 function markerAtPoint(x,y,tolerance=8){
+  if(modeSel.value!=="wave")return null;
   const p=plotMetrics;
   if(y<p.top||y>p.top+p.h)return null;
   let best=null;
@@ -425,6 +502,7 @@ function markerAtPoint(x,y,tolerance=8){
   return best;
 }
 function addSelectionMarker(x,y){
+  if(modeSel.value!=="wave")return;
   const p=plotMetrics;
   if(x<p.left||x>p.left+p.w||y<p.top||y>p.top+p.h)return;
   const marker={id:++markerCounter,pos:Math.max(0,Math.min(1,(x-p.left)/p.w))};
@@ -434,6 +512,12 @@ function addSelectionMarker(x,y){
 
 cv.addEventListener("pointerdown",e=>{
   const {x,y}=canvasPoint(e);
+  if(modeSel.value!=="wave"){
+    pointerDownPoint=null;
+    draggingMarkerId=null;
+    cv.style.cursor="default";
+    return;
+  }
 
   const trash=markerTrashHitAreas.find(a=>x>=a.x&&x<=a.x+a.w&&y>=a.y&&y<=a.y+a.h);
   if(trash){
@@ -463,6 +547,13 @@ cv.addEventListener("pointermove",e=>{
   const {x,y}=canvasPoint(e);
   const p=plotMetrics;
 
+  if(modeSel.value!=="wave"){
+    draggingMarkerId=null;
+    pointerDownPoint=null;
+    cv.style.cursor="default";
+    return;
+  }
+
   if(draggingMarkerId!==null){
     const marker=selectionMarkers.find(m=>m.id===draggingMarkerId);
     if(marker){
@@ -480,7 +571,7 @@ cv.addEventListener("pointermove",e=>{
     cv.style.cursor="pointer";
     return;
   }
-  cv.style.cursor=markerAtPoint(x,y)?"ew-resize":"crosshair";
+  cv.style.cursor=modeSel.value==="wave"?(markerAtPoint(x,y)?"ew-resize":"crosshair"):"default";
 });
 
 cv.addEventListener("pointerup",e=>{
@@ -507,11 +598,11 @@ cv.addEventListener("pointercancel",e=>{
   pointerDownPoint=null;
   markerDragMoved=false;
   cv.releasePointerCapture?.(e.pointerId);
-  cv.style.cursor="crosshair";
+  cv.style.cursor=modeSel.value==="wave"?"crosshair":"default";
 });
 
 cv.addEventListener("pointerleave",()=>{
-  if(draggingMarkerId===null)cv.style.cursor="crosshair";
+  if(draggingMarkerId===null)cv.style.cursor=modeSel.value==="wave"?"crosshair":"default";
 });
 draw();
 
@@ -636,7 +727,7 @@ function draw(){
   ctx.translate(margin.left,margin.top);
 
   // 2本のマーカー間を先に塗り、グリッドや波形をその上に描く
-  if(selectionMarkers.length===2){
+  if(mode==="wave"&&selectionMarkers.length===2){
     const x1=selectionMarkers[0].pos*w;
     const x2=selectionMarkers[1].pos*w;
     const left=Math.min(x1,x2);
@@ -652,6 +743,14 @@ function draw(){
   ctx.setLineDash([]);
   ctx.fillStyle="#445";
   ctx.font="12px 'M PLUS Rounded 1c'";
+
+  if(mode!=="wave"&&selectionMarkers.length===2){
+    ctx.save();
+    ctx.fillStyle="#5e6b82";
+    ctx.font="12px 'M PLUS Rounded 1c'";
+    ctx.fillText("時間波形で選択した区間を表示",8,18);
+    ctx.restore();
+  }
 
   // ===== 目盛 =====
   if(mode==="wave"){
@@ -777,22 +876,30 @@ function draw(){
   snapshots.forEach(s=>{
     if(s.visible===false)return;
     const opts={width:lineWidth,dash:s.dash||[9,5],alpha:.88};
-    if(mode==="wave") wave(s.time,s.color,s.shift,opts);
-    if(mode==="polar") polar(s.time,s.color,opts);
-    if(mode==="lissajous") liss(s.time,s.color,opts);
-    if(mode==="spectrum") spectrum(s.freq,s.color,opts);
+    if(mode==="wave"){
+      wave(s.time,s.color,s.shift,opts);
+    }else{
+      const segment=getSelectedTimeSegment(s.time,s.shift,sampleRate);
+      if(mode==="polar") polar(segment,s.color,opts);
+      if(mode==="lissajous") liss(segment,s.color,opts);
+      if(mode==="spectrum") spectrum(spectrumFromTimeSegment(segment),s.color,opts);
+    }
   });
 
   const currentOpts={width:lineWidth+1.25,dash:[],alpha:1,current:true};
   if(analyser&&dataTime&&dataFreq){
-    if(mode==="wave") wave(dataTime,currentColor,0,currentOpts);
-    if(mode==="polar") polar(dataTime,currentColor,currentOpts);
-    if(mode==="lissajous") liss(dataTime,currentColor,currentOpts);
-    if(mode==="spectrum") spectrum(dataFreq,currentColor,currentOpts);
+    if(mode==="wave"){
+      wave(dataTime,currentColor,0,currentOpts);
+    }else{
+      const segment=getSelectedTimeSegment(dataTime,0,sampleRate);
+      if(mode==="polar") polar(segment,currentColor,currentOpts);
+      if(mode==="lissajous") liss(segment,currentColor,currentOpts);
+      if(mode==="spectrum") spectrum(spectrumFromTimeSegment(segment),currentColor,currentOpts);
+    }
   }
 
-  // ===== 区間マーカー =====
-  selectionMarkers.forEach(marker=>{
+  // ===== 区間マーカー（時間波形のみ表示） =====
+  if(mode==="wave")selectionMarkers.forEach(marker=>{
     const x=marker.pos*w;
 
     // 縦の破線（カーソルを重ねると左右にドラッグ可能）
